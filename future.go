@@ -15,12 +15,10 @@ func (a *Future[T]) Get(ctx context.Context) T {
 	var zero T
 	select {
 	case <-ctx.Done():
+		a.errChan <- ctx.Err()
 		return zero
 	case val := <-a.resChan:
-		if val != nil {
-			return val
-		}
-		return zero
+		return val
 	}
 }
 
