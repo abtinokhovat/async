@@ -74,7 +74,7 @@ func (g *Group) submit(t task) {
 }
 
 // Execute manages to execute the Activity with the Group and returns a future
-func Execute[Req any, Res any](ctx context.Context, grp *Group, req Req, executor Activity[Req, Res]) Future[Res] {
+func Execute[Req any, Res any](ctx context.Context, grp *Group, executor Activity[Req, Res], req Req) Future[Res] {
 	res := &Future[Res]{
 		resChan: make(chan Res, 1),
 		errChan: make(chan error, 1),
