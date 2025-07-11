@@ -33,7 +33,7 @@ type (
 	}
 )
 
-type Activity[Req any, Res any] func(ctx context.Context, req Req) (Res, error)
+type Activity[In any, Out any] func(ctx context.Context, in In) (Out, error)
 
 type VoidActivity = Activity[Void, Void]
 
@@ -47,16 +47,16 @@ func NewVoidActivity(fn func(ctx context.Context) error) VoidActivity {
 
 // NewActivityWithReq adapts a function with a request but no result (func(ctx, req) error)
 // into an Activity.
-func NewActivityWithReq[Req any](fn func(ctx context.Context, req Req) error) Activity[Req, Void] {
-	return func(ctx context.Context, req Req) (Void, error) {
-		return Void{}, fn(ctx, req)
+func NewActivityWithReq[In any](fn func(ctx context.Context, in In) error) Activity[In, Void] {
+	return func(ctx context.Context, in In) (Void, error) {
+		return Void{}, fn(ctx, in)
 	}
 }
 
 // NewActivityWithRes adapts a function with no request but a result (func(ctx) (T, error))
 // into an Activity.
-func NewActivityWithRes[T any](fn func(ctx context.Context) (T, error)) Activity[Void, T] {
-	return func(ctx context.Context, _ Void) (T, error) {
+func NewActivityWithRes[Out any](fn func(ctx context.Context) (Out, error)) Activity[Void, Out] {
+	return func(ctx context.Context, _ Void) (Out, error) {
 		return fn(ctx)
 	}
 }
