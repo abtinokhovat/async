@@ -14,13 +14,17 @@ type WorkerGroup struct {
 	opts WorkerGroupOpts
 }
 
-func NewWorkerGroup(workerCount int) *WorkerGroup {
-	return NewWorkerGroupWithOpts(workerCount, WorkerGroupOpts{})
-}
+type WorkerGroupOptsFunc func(*WorkerGroupOpts)
 
-func NewWorkerGroupWithOpts(workerCount int, opts WorkerGroupOpts) *WorkerGroup {
+func NewWorkerGroup(workerCount int, wopts ...WorkerGroupOptsFunc) *WorkerGroup {
+	workerOpts := WorkerGroupOpts{}
+
+	for _, opt := range wopts {
+		opt(&workerOpts)
+	}
+
 	poolOpts := WorkerPoolOpts{
-		FastFail:        opts.FastFail,
+		FastFail:        workerOpts.FastFail,
 		WorkQueueSize:   workerCount * 2,
 		ErrorBufferSize: workerCount,
 	}
@@ -30,10 +34,10 @@ func NewWorkerGroupWithOpts(workerCount int, opts WorkerGroupOpts) *WorkerGroup 
 	}
 }
 
-func (g *WorkerGroup) WithFastFail() *WorkerGroup {
-	g.opts.FastFail = true
-	g.pool.WithFastFail()
-	return g
+func withFastFail() WorkerGroupOptsFunc {
+	return func(o *WorkerGroupOpts) {
+		o.FastFail = true
+	}
 }
 
 func (g *WorkerGroup) Wait() error {

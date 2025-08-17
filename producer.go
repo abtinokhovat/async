@@ -3,6 +3,7 @@ package async
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 )
 
@@ -19,7 +20,7 @@ type ProducerOpts struct {
 
 type Producer[T any] struct {
 	pool       *WorkerPool
-	resultChan *resultQueue[T]
+	resultChan Queue[TaskResult[T]]
 	opts       ProducerOpts
 	once       sync.Once
 }
@@ -48,7 +49,7 @@ func NewProducerWithOpts[T any](workerCount int, opts ProducerOpts) *Producer[T]
 
 	return &Producer[T]{
 		pool:       NewWorkerPool(workerCount, poolOpts),
-		resultChan: newResultQueue[T](),
+		resultChan: newQueue[TaskResult[T]](),
 		opts:       opts,
 	}
 }
@@ -106,7 +107,7 @@ func (p *Producer[T]) sendResult(result TaskResult[T]) {
 func (p *Producer[T]) Receive() <-chan TaskResult[T] {
 	p.once.Do(func() {
 		go func() {
-			_ = p.wait()
+			_ = p.Wait()
 		}()
 	})
 
@@ -117,9 +118,10 @@ func (p *Producer[T]) Close() error {
 	return p.pool.close()
 }
 
-func (p *Producer[T]) wait() error {
+func (p *Producer[T]) Wait() error {
 	err := p.pool.Wait()
 	p.resultChan.Close()
+	fmt.Println("closing producer")
 	return err
 }
 
@@ -131,6 +133,6 @@ func (p *Producer[T]) IsActive() bool {
 	return p.pool.IsActive()
 }
 
-func (p *Producer[T]) Stats() WorkerPoolStats {
+func (p *Producer[T]) Stats() Stats {
 	return p.pool.Stats()
 }

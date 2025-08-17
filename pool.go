@@ -22,11 +22,12 @@ type WorkerPoolOpts struct {
 // WorkerPool manages a pool of workers and handles common functionality
 type WorkerPool struct {
 	workerCount int
-	workQueue   chan WorkerTask
+	workQueue   Queue[WorkerTask]
 
-	wg        sync.WaitGroup
-	once      sync.Once
-	closeOnce sync.Once
+	wg         sync.WaitGroup
+	once       sync.Once
+	closeOnce  sync.Once
+	close2Once sync.Once
 
 	// error handling
 	errCh chan error
@@ -64,7 +65,7 @@ func NewWorkerPool(workerCount int, opts WorkerPoolOpts) *WorkerPool {
 
 	pool := &WorkerPool{
 		workerCount: workerCount,
-		workQueue:   make(chan WorkerTask, opts.WorkQueueSize),
+		workQueue:   newQueue[WorkerTask](),
 		errCh:       make(chan error, opts.ErrorBufferSize),
 		cancel:      make(chan struct{}),
 		ctx:         context.Background(),
@@ -103,7 +104,7 @@ func (p *WorkerPool) start() {
 func (p *WorkerPool) worker(id int) {
 	defer p.wg.Done()
 
-	for task := range p.workQueue {
+	for task := range p.workQueue.Receive() {
 		task.execute()
 	}
 }
@@ -132,13 +133,15 @@ func (p *WorkerPool) Submit(task WorkerTask) error {
 	}
 
 	select {
-	case p.workQueue <- task:
-		return nil
 	case <-p.ctx.Done():
 		return p.ctx.Err()
 	case <-task.ctx.Done():
 		return task.ctx.Err()
+	default:
+		p.workQueue.Send(task)
 	}
+
+	return nil
 }
 
 // ReportError reports an error to the error handler
@@ -174,7 +177,7 @@ func (p *WorkerPool) close() error {
 	}
 
 	p.closeOnce.Do(func() {
-		close(p.workQueue)
+		p.workQueue.Close()
 	})
 
 	return nil
@@ -184,7 +187,9 @@ func (p *WorkerPool) close() error {
 func (p *WorkerPool) Wait() error {
 	p.close()
 	p.wg.Wait()
-	close(p.errCh)
+	p.close2Once.Do(func() {
+		close(p.errCh)
+	})
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -212,26 +217,22 @@ func (p *WorkerPool) IsActive() bool {
 }
 
 // Stats return basic statistics about the worker pool
-func (p *WorkerPool) Stats() WorkerPoolStats {
+func (p *WorkerPool) Stats() Stats {
 	p.mu.Lock()
 	errorCount := len(p.errs)
 	p.mu.Unlock()
 
-	return WorkerPoolStats{
-		WorkerCount:   p.workerCount,
-		WorkQueueSize: len(p.workQueue),
-		WorkQueueCap:  cap(p.workQueue),
-		ErrorCount:    errorCount,
-		IsActive:      p.IsActive(),
-		IsCancelled:   p.IsCancelled(),
+	return Stats{
+		WorkerCount: p.workerCount,
+		ErrorCount:  errorCount,
+		IsActive:    p.IsActive(),
+		IsCancelled: p.IsCancelled(),
 	}
 }
 
-type WorkerPoolStats struct {
-	WorkerCount   int
-	WorkQueueSize int
-	WorkQueueCap  int
-	ErrorCount    int
-	IsActive      bool
-	IsCancelled   bool
+type Stats struct {
+	WorkerCount int
+	ErrorCount  int
+	IsActive    bool
+	IsCancelled bool
 }
